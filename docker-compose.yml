@@ -31,7 +31,7 @@ volumes:
 
 #mysql -h localhost -P 3306 --protocol=tcp -u root -p
 
-#CREATE TABLE containers (id VARCHAR(255), image VARCHAR(255), image_id VARCHAR(255), command VARCHAR(255), created BIGINT, state VARCHAR(255), status VARCHAR(255));
+#CREATE TABLE containers (id VARCHAR(255), image VARCHAR(255), image_id VARCHAR(255), name VARCHAR(255), command VARCHAR(255), created BIGINT, state VARCHAR(255), status VARCHAR(255));
 
 #CREATE TABLE test_user (name VARCHAR(100), email VARCHAR(100), id BIGINT);
 

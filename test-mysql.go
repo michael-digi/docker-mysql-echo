@@ -17,6 +17,7 @@ type Container struct {
 	ID      string `db:"id" json:"id"`
 	Image   string `db:"image" json:"image"`
 	ImageID string `db:"image_id" json:"imageId"`
+	Name    string `db:"name" json:"name"`
 	Command string `db:"command" json:"command"`
 	Created int64  `db:"created" json:"created"`
 	State   string `db:"state" json:"state"`
@@ -63,11 +64,12 @@ func insertContainers(c echo.Context) error {
 
 	tx := db.MustBegin()
 	statement := `
-		INSERT INTO containers(id, image, image_id, command, created, state, status) 
-		VALUES(:id, :image, :image_id, :command, :created, :state, :status)`
+		INSERT INTO containers(id, image, image_id, name, command, created, state, status) 
+		VALUES(:id, :image, :image_id, :name, :command, :created, :state, :status)`
 
 	for _, c := range containers {
-		container := Container{c.ID[:10], c.Image, c.ImageID, c.Command, c.Created, c.State, c.Status}
+
+		container := Container{c.ID[:10], c.Image, c.ImageID, c.Names[0], c.Command, c.Created, c.State, c.Status}
 		_, err := tx.NamedExec(statement, container)
 
 		if err != nil {
