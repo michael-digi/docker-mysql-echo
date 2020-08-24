@@ -40,6 +40,8 @@ func checkAPIKey(next echo.HandlerFunc) echo.HandlerFunc {
 func listContainers(c echo.Context) error {
 	containers := []Container{}
 
+	// 'Select' is an sqlx statement that allows a direct reading from columns into an array of struct instances,
+	// or any other type
 	err := db.Select(&containers, `SELECT * FROM containers`)
 
 	if err != nil {
@@ -62,11 +64,15 @@ func insertContainers(c echo.Context) error {
 		panic(err)
 	}
 
+	// begins a transaction, this is to ensure we're using the same connection from the pool throughout the
+	// transaction's duration
 	tx := db.MustBegin()
 	statement := `
 		INSERT INTO containers(id, image, image_id, name, command, created, state, status) 
 		VALUES(:id, :image, :image_id, :name, :command, :created, :state, :status)`
 
+	// NamedExec is a named statement transaction, evidenced by the :value scheme in the VALUES above. This allows
+	// for direct use of structs in the Exec call
 	for _, c := range containers {
 
 		container := Container{c.ID[:10], c.Image, c.ImageID, c.Names[0], c.Command, c.Created, c.State, c.Status}
@@ -77,6 +83,7 @@ func insertContainers(c echo.Context) error {
 		}
 	}
 
+	// commit 'saves' the executed transactions to the db and closes the open connection
 	err = tx.Commit()
 
 	if err != nil {
