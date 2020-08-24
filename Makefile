@@ -7,9 +7,9 @@ start:
 	docker-compose up --force-recreate
 
 get:
-	curl -H "Content-Type: application/json" \
+	curl -s -H "Content-Type: application/json" \
 	-H "x-api-key: thisisanapikey" \
-	http://localhost:3000/containers/list
+	http://localhost:3000/containers/list | json_pp
 
 rebuild:
 	docker-compose build

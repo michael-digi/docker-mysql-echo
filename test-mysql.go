@@ -45,9 +45,7 @@ func listContainers(c echo.Context) error {
 		panic(err)
 	}
 
-	containerPtr := &containers
-
-	return c.JSON(http.StatusOK, containerPtr)
+	return c.JSON(http.StatusOK, &containers)
 }
 
 func insertContainers(c echo.Context) error {
