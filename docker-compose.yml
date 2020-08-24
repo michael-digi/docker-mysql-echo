@@ -1,0 +1,38 @@
+version: '3'
+
+services:
+  db:
+    image: mysql:latest
+    container_name: mysqlDB
+    restart: always
+    environment:
+      MYSQL_DATABASE: 'test'
+      MYSQL_USER: 'user'
+      MYSQL_PASSWORD: 'password'
+      MYSQL_ROOT_PASSWORD: 'password'
+    ports:
+      # <Port exposed> : < MySQL Port running inside container>
+      - '3306:3306'
+    expose:
+      - '3306'
+    volumes:
+      - my-db:/var/lib/mysql
+  api:
+    build: .
+    container_name: api
+    ports:
+      - "3000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - db
+volumes:
+  my-db:
+
+#mysql -h localhost -P 3306 --protocol=tcp -u root -p
+
+#CREATE TABLE containers (id VARCHAR(255), image VARCHAR(255), image_id VARCHAR(255), command VARCHAR(255), created BIGINT, state VARCHAR(255), status VARCHAR(255));
+
+#CREATE TABLE test_user (name VARCHAR(100), email VARCHAR(100), id BIGINT);
+
+#INSERT INTO containers(id, image, image_id, command, created, state, status) VALUES(:id, :image, :image_id, :command, :created, :state, :status)`
