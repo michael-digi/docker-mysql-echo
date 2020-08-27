@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
 	"docker.io/go-docker"
 	"docker.io/go-docker/api/types"
@@ -37,12 +40,64 @@ func checkAPIKey(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
+// First get list of all containers (if you don't specify 'ALL: true' in types.ContainerListOptions,
+// it defaults to only containers currently running). Remove the '/' from each c.Names[0] in the loop
+// and then compare against the 'name' param passed in. Once found, grab the ID and use it in ContainerStart.
+func startContainer(c echo.Context) error {
+	cli, err := docker.NewEnvClient()
+	containerToStart := c.Param("name")
+
+	if err != nil {
+		panic(err)
+	}
+
+	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{All: true})
+
+	for _, c := range containers {
+		containerName := strings.Replace(c.Names[0], "/", "", -1)
+		if containerName == containerToStart {
+			cli.ContainerStart(context.Background(), c.ID, types.ContainerStartOptions{})
+			fmt.Println("Found container", containerToStart, "and started it")
+		}
+	}
+
+	return nil
+}
+
+// First get list of all running containers. remove the '/' from each c.Names[0] in the loop
+// and then compare against the 'name' param passed in. Once found, grab the ID and use it in ContainerStop.
+func stopContainer(c echo.Context) error {
+	cli, err := docker.NewEnvClient()
+	containerToStop := c.Param("name")
+
+	fmt.Println(containerToStop, "name")
+
+	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	timeout := time.Duration(2) * time.Second
+
+	for _, c := range containers {
+		containerName := strings.Replace(c.Names[0], "/", "", -1)
+		if containerName == containerToStop {
+			cli.ContainerStop(context.Background(), c.ID, &timeout)
+			fmt.Println("Found container", containerToStop, "and stopped it")
+		}
+	}
+
+	return nil
+}
+
 func listContainers(c echo.Context) error {
 	containers := []Container{}
 
 	// 'Select' is an sqlx statement that allows a direct reading from columns into an array of struct instances,
 	// or any other type
 	err := db.Select(&containers, `SELECT * FROM containers`)
+
+	fmt.Println(containers, "these are containers")
 
 	if err != nil {
 		panic(err)
@@ -64,7 +119,7 @@ func insertContainers(c echo.Context) error {
 		panic(err)
 	}
 
-	// begins a transaction, this is to ensure we're using the same connection from the pool throughout the
+	// Begins a transaction, this is to ensure we're using the same connection from the pool throughout the
 	// transaction's duration
 	tx := db.MustBegin()
 	statement := `
@@ -83,7 +138,7 @@ func insertContainers(c echo.Context) error {
 		}
 	}
 
-	// commit 'saves' the executed transactions to the db and closes the open connection
+	// Commit 'saves' the executed transactions to the db and closes the open connection
 	err = tx.Commit()
 
 	if err != nil {
@@ -110,6 +165,10 @@ func main() {
 	protected.GET("/add", insertContainers)
 
 	protected.GET("/list", listContainers)
+
+	protected.GET("/stop/:name", stopContainer)
+
+	protected.GET("/start/:name", startContainer)
 
 	e.Logger.Fatal(e.Start(":3000"))
 
