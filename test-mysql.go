@@ -26,7 +26,7 @@ type Container struct {
 	Status  string `db:"status" json:"status"`
 }
 
-// Config holds sql connection and docker connection
+// Config holds SQL, Docker and Echo connection
 type Config struct {
 	SQL    *sqlx.DB
 	Docker *docker.Client
