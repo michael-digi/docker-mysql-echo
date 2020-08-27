@@ -54,10 +54,15 @@ func startContainer(c echo.Context) error {
 
 	for _, c := range containers {
 		containerName := strings.Replace(c.Names[0], "/", "", -1)
-		fmt.Println(c.Status, "this is status")
+		words := strings.Fields(c.Status)
+
 		if containerName == containerToStart {
-			cli.ContainerStart(context.Background(), c.ID, types.ContainerStartOptions{})
-			fmt.Println("Found container", containerToStart, "and started it")
+			if words[0] == "Exited" {
+				cli.ContainerStart(context.Background(), c.ID, types.ContainerStartOptions{})
+				fmt.Println("Found container", containerToStart, "and started it")
+			} else {
+				fmt.Println("Container", containerToStart, "already running")
+			}
 		}
 	}
 
@@ -72,16 +77,21 @@ func stopContainer(c echo.Context) error {
 
 	fmt.Println(containerToStop, "name")
 
-	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{})
+	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{All: true})
 	if err != nil {
 		panic(err)
 	}
 
 	for _, c := range containers {
 		containerName := strings.Replace(c.Names[0], "/", "", -1)
+		words := strings.Fields(c.Status)
 		if containerName == containerToStop {
-			cli.ContainerStop(context.Background(), c.ID, nil)
-			fmt.Println("Found container", containerToStop, "and stopped it")
+			if words[0] == "Up" {
+				cli.ContainerStop(context.Background(), c.ID, nil)
+				fmt.Println("Found container", containerToStop, "and stopped it")
+			} else {
+				fmt.Println("Container", containerToStop, "already stopped")
+			}
 		}
 	}
 
@@ -150,7 +160,7 @@ func main() {
 	var err error
 	e := echo.New()
 
-	db, err = sqlx.Open("mysql", "root:password@tcp(mysqlDB)/test")
+	db, err = sqlx.Open("mysql", "root:password@tcp(localhost)/test")
 
 	if err != nil {
 		panic(err)

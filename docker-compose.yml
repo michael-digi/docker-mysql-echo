@@ -17,15 +17,15 @@ services:
       - '3306'
     volumes:
       - my-db:/var/lib/mysql
-  api:
-    build: .
-    container_name: api
-    ports:
-      - "3000:3000"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    depends_on:
-      - db
+  # api:
+  #   build: .
+  #   container_name: api
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   depends_on:
+  #     - db
 volumes:
   my-db:
 
