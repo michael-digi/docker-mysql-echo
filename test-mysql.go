@@ -26,7 +26,11 @@ type Container struct {
 	Status  string `db:"status" json:"status"`
 }
 
-var db *sqlx.DB
+// Config holds sql connection and docker connection
+type Config struct {
+	GoSQL    *sqlx.DB
+	GoDocker *docker.Client
+}
 
 func checkAPIKey(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
@@ -42,15 +46,14 @@ func checkAPIKey(next echo.HandlerFunc) echo.HandlerFunc {
 // First get list of all containers (if you don't specify 'ALL: true' in types.ContainerListOptions,
 // it defaults to only containers currently running). Remove the '/' from each c.Names[0] in the loop
 // and then compare against the 'name' param passed in. Once found, grab the ID and use it in ContainerStart.
-func startContainer(c echo.Context) error {
-	cli, err := docker.NewEnvClient()
+func (config *Config) startContainer(c echo.Context) error {
 	containerToStart := c.Param("name")
+
+	containers, err := config.GoDocker.ContainerList(context.Background(), types.ContainerListOptions{All: true})
 
 	if err != nil {
 		panic(err)
 	}
-
-	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{All: true})
 
 	for _, c := range containers {
 		containerName := strings.Replace(c.Names[0], "/", "", -1)
@@ -58,7 +61,7 @@ func startContainer(c echo.Context) error {
 
 		if containerName == containerToStart {
 			if words[0] == "Exited" {
-				cli.ContainerStart(context.Background(), c.ID, types.ContainerStartOptions{})
+				config.GoDocker.ContainerStart(context.Background(), c.ID, types.ContainerStartOptions{})
 				fmt.Println("Found container", containerToStart, "and started it")
 			} else {
 				fmt.Println("Container", containerToStart, "already running")
@@ -71,13 +74,12 @@ func startContainer(c echo.Context) error {
 
 // First get list of all running containers. remove the '/' from each c.Names[0] in the loop
 // and then compare against the 'name' param passed in. Once found, grab the ID and use it in ContainerStop.
-func stopContainer(c echo.Context) error {
-	cli, err := docker.NewEnvClient()
+func (config *Config) stopContainer(c echo.Context) error {
 	containerToStop := c.Param("name")
 
 	fmt.Println(containerToStop, "name")
 
-	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{All: true})
+	containers, err := config.GoDocker.ContainerList(context.Background(), types.ContainerListOptions{All: true})
 	if err != nil {
 		panic(err)
 	}
@@ -87,7 +89,7 @@ func stopContainer(c echo.Context) error {
 		words := strings.Fields(c.Status)
 		if containerName == containerToStop {
 			if words[0] == "Up" {
-				cli.ContainerStop(context.Background(), c.ID, nil)
+				config.GoDocker.ContainerStop(context.Background(), c.ID, nil)
 				fmt.Println("Found container", containerToStop, "and stopped it")
 			} else {
 				fmt.Println("Container", containerToStop, "already stopped")
@@ -98,30 +100,25 @@ func stopContainer(c echo.Context) error {
 	return nil
 }
 
-func listContainers(c echo.Context) error {
+func (config *Config) listContainers(c echo.Context) error {
 	containers := []Container{}
 
 	// 'Select' is an sqlx statement that allows a direct reading from columns into an array of struct instances,
 	// or any other type
-	err := db.Select(&containers, `SELECT * FROM containers`)
+	err := config.GoSQL.Select(&containers, `SELECT * FROM containers`)
 
 	fmt.Println(containers, "these are containers")
 
 	if err != nil {
+		fmt.Println("this panicked")
 		panic(err)
 	}
 
 	return c.JSON(http.StatusOK, &containers)
 }
 
-func insertContainers(c echo.Context) error {
-	cli, err := docker.NewEnvClient()
-
-	if err != nil {
-		panic(err)
-	}
-
-	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{})
+func (config *Config) insertContainers(c echo.Context) error {
+	containers, err := config.GoDocker.ContainerList(context.Background(), types.ContainerListOptions{})
 
 	if err != nil {
 		panic(err)
@@ -129,7 +126,7 @@ func insertContainers(c echo.Context) error {
 
 	// Begins a transaction, this is to ensure we're using the same connection from the pool throughout the
 	// transaction's duration
-	tx := db.MustBegin()
+	tx := config.GoSQL.MustBegin()
 	statement := `
 		INSERT INTO containers(id, image, image_id, name, command, created, state, status) 
 		VALUES(:id, :image, :image_id, :name, :command, :created, :state, :status)`
@@ -160,9 +157,14 @@ func main() {
 	var err error
 	e := echo.New()
 
-	db, err = sqlx.Open("mysql", "root:password@tcp(localhost)/test")
+	config := &Config{}
+
+	config.GoSQL, err = sqlx.Open("mysql", "root:password@tcp(localhost)/test")
+
+	config.GoDocker, err = docker.NewEnvClient()
 
 	if err != nil {
+		fmt.Println("this panicked")
 		panic(err)
 	}
 
@@ -170,16 +172,16 @@ func main() {
 
 	protected := e.Group("/containers", checkAPIKey)
 
-	protected.GET("/add", insertContainers)
+	protected.GET("/add", config.insertContainers)
 
-	protected.GET("/list", listContainers)
+	protected.GET("/list", config.listContainers)
 
-	protected.GET("/stop/:name", stopContainer)
+	protected.GET("/stop/:name", config.stopContainer)
 
-	protected.GET("/start/:name", startContainer)
+	protected.GET("/start/:name", config.startContainer)
 
 	e.Logger.Fatal(e.Start(":3000"))
 
-	defer db.Close()
+	defer config.GoSQL.Close()
 
 }
