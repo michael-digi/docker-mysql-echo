@@ -28,8 +28,9 @@ type Container struct {
 
 // Config holds sql connection and docker connection
 type Config struct {
-	GoSQL    *sqlx.DB
-	GoDocker *docker.Client
+	SQL    *sqlx.DB
+	Docker *docker.Client
+	Echo   *echo.Echo
 }
 
 func checkAPIKey(next echo.HandlerFunc) echo.HandlerFunc {
@@ -49,7 +50,7 @@ func checkAPIKey(next echo.HandlerFunc) echo.HandlerFunc {
 func (config *Config) startContainer(c echo.Context) error {
 	containerToStart := c.Param("name")
 
-	containers, err := config.GoDocker.ContainerList(context.Background(), types.ContainerListOptions{All: true})
+	containers, err := config.Docker.ContainerList(context.Background(), types.ContainerListOptions{All: true})
 
 	if err != nil {
 		panic(err)
@@ -61,7 +62,7 @@ func (config *Config) startContainer(c echo.Context) error {
 
 		if containerName == containerToStart {
 			if words[0] == "Exited" {
-				config.GoDocker.ContainerStart(context.Background(), c.ID, types.ContainerStartOptions{})
+				config.Docker.ContainerStart(context.Background(), c.ID, types.ContainerStartOptions{})
 				fmt.Println("Found container", containerToStart, "and started it")
 			} else {
 				fmt.Println("Container", containerToStart, "already running")
@@ -79,7 +80,7 @@ func (config *Config) stopContainer(c echo.Context) error {
 
 	fmt.Println(containerToStop, "name")
 
-	containers, err := config.GoDocker.ContainerList(context.Background(), types.ContainerListOptions{All: true})
+	containers, err := config.Docker.ContainerList(context.Background(), types.ContainerListOptions{All: true})
 	if err != nil {
 		panic(err)
 	}
@@ -89,7 +90,7 @@ func (config *Config) stopContainer(c echo.Context) error {
 		words := strings.Fields(c.Status)
 		if containerName == containerToStop {
 			if words[0] == "Up" {
-				config.GoDocker.ContainerStop(context.Background(), c.ID, nil)
+				config.Docker.ContainerStop(context.Background(), c.ID, nil)
 				fmt.Println("Found container", containerToStop, "and stopped it")
 			} else {
 				fmt.Println("Container", containerToStop, "already stopped")
@@ -105,7 +106,7 @@ func (config *Config) listContainers(c echo.Context) error {
 
 	// 'Select' is an sqlx statement that allows a direct reading from columns into an array of struct instances,
 	// or any other type
-	err := config.GoSQL.Select(&containers, `SELECT * FROM containers`)
+	err := config.SQL.Select(&containers, `SELECT * FROM containers`)
 
 	fmt.Println(containers, "these are containers")
 
@@ -118,7 +119,7 @@ func (config *Config) listContainers(c echo.Context) error {
 }
 
 func (config *Config) insertContainers(c echo.Context) error {
-	containers, err := config.GoDocker.ContainerList(context.Background(), types.ContainerListOptions{})
+	containers, err := config.Docker.ContainerList(context.Background(), types.ContainerListOptions{})
 
 	if err != nil {
 		panic(err)
@@ -126,7 +127,7 @@ func (config *Config) insertContainers(c echo.Context) error {
 
 	// Begins a transaction, this is to ensure we're using the same connection from the pool throughout the
 	// transaction's duration
-	tx := config.GoSQL.MustBegin()
+	tx := config.SQL.MustBegin()
 	statement := `
 		INSERT INTO containers(id, image, image_id, name, command, created, state, status) 
 		VALUES(:id, :image, :image_id, :name, :command, :created, :state, :status)`
@@ -155,22 +156,22 @@ func (config *Config) insertContainers(c echo.Context) error {
 
 func main() {
 	var err error
-	e := echo.New()
-
 	config := &Config{}
 
-	config.GoSQL, err = sqlx.Open("mysql", "root:password@tcp(localhost)/test")
+	config.Echo = echo.New()
 
-	config.GoDocker, err = docker.NewEnvClient()
+	config.Docker, err = docker.NewEnvClient()
+
+	config.SQL, err = sqlx.Open("mysql", "root:password@tcp(localhost)/test")
 
 	if err != nil {
 		fmt.Println("this panicked")
 		panic(err)
 	}
 
-	e.Use(middleware.Logger())
+	config.Echo.Use(middleware.Logger())
 
-	protected := e.Group("/containers", checkAPIKey)
+	protected := config.Echo.Group("/containers", checkAPIKey)
 
 	protected.GET("/add", config.insertContainers)
 
@@ -180,8 +181,8 @@ func main() {
 
 	protected.GET("/start/:name", config.startContainer)
 
-	e.Logger.Fatal(e.Start(":3000"))
+	config.Echo.Logger.Fatal(config.Echo.Start(":3000"))
 
-	defer config.GoSQL.Close()
+	defer config.SQL.Close()
 
 }
