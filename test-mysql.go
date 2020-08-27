@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"docker.io/go-docker"
 	"docker.io/go-docker/api/types"
@@ -55,6 +54,7 @@ func startContainer(c echo.Context) error {
 
 	for _, c := range containers {
 		containerName := strings.Replace(c.Names[0], "/", "", -1)
+		fmt.Println(c.Status, "this is status")
 		if containerName == containerToStart {
 			cli.ContainerStart(context.Background(), c.ID, types.ContainerStartOptions{})
 			fmt.Println("Found container", containerToStart, "and started it")
@@ -77,12 +77,10 @@ func stopContainer(c echo.Context) error {
 		panic(err)
 	}
 
-	timeout := time.Duration(2) * time.Second
-
 	for _, c := range containers {
 		containerName := strings.Replace(c.Names[0], "/", "", -1)
 		if containerName == containerToStop {
-			cli.ContainerStop(context.Background(), c.ID, &timeout)
+			cli.ContainerStop(context.Background(), c.ID, nil)
 			fmt.Println("Found container", containerToStop, "and stopped it")
 		}
 	}
